@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 from astropy.table import Table
 from photometric_calibration import FilterMag, Settings, Color, create_matrix,\
-      create_vector, get_unique_filters, calculate_constants
+      create_vector, get_unique_filters, calculate_constants, get_photometric_transformation
 
 def read_in_test_data():
     """Reads in the test file."""
@@ -194,7 +194,7 @@ class TestAgainstExample(unittest.TestCase):
     C2 = float(const[1])
     C3 = float(const[2])
 
-    cal_gmos_pan_r = r_pan + C2*(g_pan-r_pan) + C3*(i_pan-r_pan)
+    cal_gmos_r =r_gmos - C1 - C2*(g_pan-r_pan) - C3*(i_pan-r_pan)
 
     #New method
     r_band_obs = FilterMag('r_gmos', np.array(r_gmos), np.array(re_gmos))
@@ -223,7 +223,6 @@ class TestAgainstExample(unittest.TestCase):
 
         b_vector = create_vector(self.settings)
         for i, value in enumerate(self.B):
-            print(value, b_vector[i])
             self.assertAlmostEqual(value, b_vector[i])
 
     def test_constants(self):
@@ -234,6 +233,12 @@ class TestAgainstExample(unittest.TestCase):
         for i, value in enumerate(self.const):
             self.assertAlmostEqual(value, constant_values[i])
 
+    def test_transform(self):
+        """Return the transform and determine if it is correct."""
+        trans = get_photometric_transformation(self.settings)
+        corrected_mags = trans(np.array(self.r_gmos))
+        for i, value in enumerate(self.cal_gmos_r):
+            self.assertAlmostEqual(value, corrected_mags[i])
 
 if __name__ == '__main__':
     unittest.main()

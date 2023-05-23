@@ -8,17 +8,19 @@ from dataclasses import dataclass
 from functools import cached_property, partial
 import numpy as np
 from astropy.table import Table
+from astropy.stats import sigma_clipped_stats
+from matplotlib.pylab import plt
 
-def photometric_transformation(m_cat: np.ndarray, constants: np.ndarray, color_terms: np.ndarray):
+
+def photometric_transformation(m_inst: np.ndarray, constants: np.ndarray, color_terms: np.ndarray):
     """
     General form of the transformation from instrumental
     magnitude to photometrically corrected mag.
     """
-    constant_terms = []
+    constant_terms = np.zeros(len(color_terms[0]))
     for i, color_term in enumerate(color_terms):
-        constant_terms.append(constants[i]*color_term)
-        constant_term = np.sum(constant_terms)
-    return m_cat + constant_term
+        constant_terms -= constants[i] * color_term
+    return m_inst + constant_terms
 
 @dataclass
 class FilterMag:
@@ -129,172 +131,3 @@ def get_photometric_transformation(settings: Settings) -> callable:
     constants = calculate_constants(a_matrix, b_vector)
     transformation = partial(photometric_transformation, constants = constants, color_terms = settings.color_terms)
     return transformation
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-if __name__ == '__main__':
-    filename = "GMOS_PANSTARRS.dat"
-    # Load the data
-    gmos_panss = Table.read(filename, format='ascii')
-
-    r_gmos = gmos_panss['rmag']
-    r_pan = gmos_panss['rApMag']
-    g_pan = gmos_panss['gApMag']
-    i_pan = gmos_panss['iApMag']
-
-    re_gmos = gmos_panss['rmagerr']
-    re_pan = gmos_panss['rApMagErr']
-    ge_pan = gmos_panss['gApMagErr']
-    ie_pan = gmos_panss['iApMagErr']
-
-    # Calculate the uncertainties
-    sigma = re_gmos**2 + re_pan**2 + ge_pan**2 + ie_pan**2
-
-    # Calculate the coefficients
-    A11 = np.sum(1/sigma)  # B1
-    A12 = np.sum((g_pan-r_pan)/sigma)  # B2
-    A13 = np.sum((i_pan-r_pan)/sigma)  # B3
-    A21 = np.sum((g_pan-r_pan)/sigma)  # A1
-    A22 = np.sum((g_pan-r_pan)**2/sigma)  # A2
-    A23 = np.sum((i_pan-r_pan)*((g_pan-r_pan)/sigma))  # A3
-    A31 = np.sum((i_pan-r_pan)/sigma)  # D1
-    A32 = np.sum((i_pan-r_pan)*((g_pan-r_pan)/sigma))  # D2
-    A33 = np.sum((i_pan-r_pan)**2/sigma)  # D3
-
-    A = np.array([[A11, A12, A13],
-                [A21, A22, A23],
-                [A31, A32, A33]])
-
-    b1 = np.sum((r_gmos-r_pan)/sigma)  # B
-    b2 = np.sum((r_gmos-r_pan)*((g_pan-r_pan)/sigma))  # A
-    b3 = np.sum((r_gmos-r_pan)*((i_pan-r_pan)/sigma))  # D
-
-    B = np.array([b1,
-                b2,
-                b3])
-
-    const = np.linalg.inv(A).dot(B)
-    C1 = float(const[0])
-    C2 = float(const[1])
-    C3 = float(const[2])
-    print('C1:', C1, 'C2:', C2, 'C3:', C3)
-
-    # Calibrated GMOS Magnitude
-    cal_gmos_r =r_gmos - C1
-
-    # Calibrated GMOS magnitude with color term
-    cal_gmos_pan_r = r_pan + C2*(g_pan-r_pan) + C3*(i_pan-r_pan)
-
-    # Calculate the difference between the two calibrated GMOS magnitudes
-    r_diff = cal_gmos_r - cal_gmos_pan_r
